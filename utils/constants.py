@@ -23,7 +23,19 @@ LOJAS = {
 }
 
 # Inverso para lookup por nome
-LOJAS_POR_NOME = {v: k for k, v in LOJAS.items()}
+LOJAS_POR_NOME = {
+    "PDV": 203925713,
+    "E-commerce": 205259157,
+}
+
+# ============================================================
+# Mapeamento de depósitos
+# ============================================================
+
+DEPOSITOS = {
+    14887895820: "Loja Física - Stop Gallery",
+    14887895821: "Distribuição - Stop Gallery",
+}
 
 # ============================================================
 # Situações de pedido

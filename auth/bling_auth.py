@@ -86,20 +86,24 @@ class BlingAuth:
                 timeout=30,
             )
         except requests.RequestException as e:
+            logger.error("Falha HTTP ao renovar token: %s", e)
             raise BlingAuthError(f"Erro de conexão ao renovar token: {e}")
 
-        if response.status_code == 401:
+        if response.status_code == 401 or (response.status_code == 400 and "invalid_grant" in response.text):
+            logger.error("Refresh token inválido/expirado (%d). Body: %s", response.status_code, response.text)
             raise BlingAuthError(
                 "Refresh token inválido ou expirado. Refaça o fluxo OAuth "
                 "no Bling e atualize BLING_REFRESH_TOKEN no .env"
             )
 
         if response.status_code == 429:
+            logger.error("Rate limit (429) no endpoint de token.")
             raise BlingAuthError(
                 "Rate limit atingido na renovação de token. Aguarde e tente novamente."
             )
 
         if response.status_code != 200:
+            logger.error("Falha ao renovar token. HTTP %d - %s", response.status_code, response.text)
             raise BlingAuthError(
                 f"Erro ao renovar token: HTTP {response.status_code} — {response.text}"
             )

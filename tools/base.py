@@ -36,6 +36,7 @@ class BlingClient:
         self.auth = auth
         self.session = requests.Session()
         self.session.timeout = 30
+        self._cache = {}
 
     def _request(self, method: str, endpoint: str, params: dict = None, **kwargs) -> dict:
         """
@@ -97,8 +98,18 @@ class BlingClient:
 
         raise BlingAPIError("Número máximo de retentativas excedido.")
 
-    def get(self, endpoint: str, params: dict = None) -> dict:
-        """GET request para a API do Bling."""
+    def get(self, endpoint: str, params: dict = None, use_cache: bool = True) -> dict:
+        """GET request para a API do Bling com cache em memória opcional."""
+        if use_cache:
+            # Cria chave de cache baseada no endpoint e parâmetros
+            cache_key = f"{endpoint}_{str(params or {})}"
+            if cache_key in self._cache:
+                return self._cache[cache_key]
+                
+            result = self._request("GET", endpoint, params=params)
+            self._cache[cache_key] = result
+            return result
+            
         return self._request("GET", endpoint, params=params)
 
     def get_all_pages(self, endpoint: str, params: dict = None) -> list:

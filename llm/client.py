@@ -20,6 +20,10 @@ from tools.financeiro import (
     calcular_faturamento, calcular_margem_produtos,
     buscar_produtos_sem_giro, comparar_periodos,
 )
+from tools.contatos import buscar_contatos
+from tools.notas import buscar_notas_fiscais
+from tools.financeiro_contas import buscar_contas_receber, buscar_contas_pagar, calcular_fluxo_caixa
+from tools.catalogo import buscar_categorias, buscar_canais_venda, buscar_formas_pagamento
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +62,15 @@ class ChatEngine:
             "comparar_periodos": lambda **kw: comparar_periodos(self.bling_client, **kw),
             "buscar_produtos": lambda **kw: buscar_produtos(self.bling_client, **kw),
             "calcular_cobertura_estoque": lambda **kw: calcular_cobertura_estoque(self.bling_client, **kw),
+            "buscar_detalhe_pedido": lambda **kw: buscar_detalhe_pedido(self.bling_client, **kw),
+            "buscar_contatos": lambda **kw: buscar_contatos(self.bling_client, **kw),
+            "buscar_notas_fiscais": lambda **kw: buscar_notas_fiscais(self.bling_client, **kw),
+            "buscar_contas_receber": lambda **kw: buscar_contas_receber(self.bling_client, **kw),
+            "buscar_contas_pagar": lambda **kw: buscar_contas_pagar(self.bling_client, **kw),
+            "calcular_fluxo_caixa": lambda **kw: calcular_fluxo_caixa(self.bling_client, **kw),
+            "buscar_categorias": lambda **kw: buscar_categorias(self.bling_client),
+            "buscar_canais_venda": lambda **kw: buscar_canais_venda(self.bling_client),
+            "buscar_formas_pagamento": lambda **kw: buscar_formas_pagamento(self.bling_client),
         }
 
     def _execute_tool(self, tool_call) -> str:

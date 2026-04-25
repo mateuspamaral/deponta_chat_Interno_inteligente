@@ -241,4 +241,203 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_detalhe_pedido",
+            "description": (
+                "Busca os detalhes completos de um pedido de venda, incluindo os itens comprados. "
+                "Use para responder quais produtos compõem um pedido ou o detalhamento dos valores."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pedido_id": {
+                        "type": "integer",
+                        "description": "ID numérico do pedido no Bling.",
+                    },
+                },
+                "required": ["pedido_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_contatos",
+            "description": (
+                "Busca contatos (clientes ou fornecedores) cadastrados no Bling. "
+                "Use para responder perguntas como 'quem é o cliente X?' ou para buscar dados cadastrais."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nome": {
+                        "type": "string",
+                        "description": "Nome parcial ou completo do contato.",
+                    },
+                    "documento": {
+                        "type": "string",
+                        "description": "CPF ou CNPJ do contato (apenas números).",
+                    },
+                    "limite": {
+                        "type": "integer",
+                        "description": "Quantidade máxima de registros. Default: 50.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_notas_fiscais",
+            "description": (
+                "Busca notas fiscais eletrônicas (NF-e ou NFC-e) emitidas. "
+                "Use para responder qual nota foi gerada para um pedido, ou listar notas recentes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tipo": {
+                        "type": "string",
+                        "enum": ["nfe", "nfce", "todos"],
+                        "description": "Tipo de nota fiscal a buscar. Default: todos.",
+                    },
+                    "data_inicio": {
+                        "type": "string",
+                        "description": "Data inicial YYYY-MM-DD.",
+                    },
+                    "data_fim": {
+                        "type": "string",
+                        "description": "Data final YYYY-MM-DD.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_contas_receber",
+            "description": (
+                "Busca contas a receber. "
+                "Use para responder quanto há para receber, listar recebimentos futuros ou atrasados."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "situacao": {
+                        "type": "integer",
+                        "description": "ID da situação: 1=Em aberto, 2=Parcial, 3=Baixada/Recebida, 4=Cancelada. Omitir para todas.",
+                    },
+                    "data_inicio": {
+                        "type": "string",
+                        "description": "Data inicial de vencimento YYYY-MM-DD.",
+                    },
+                    "data_fim": {
+                        "type": "string",
+                        "description": "Data final de vencimento YYYY-MM-DD.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_contas_pagar",
+            "description": (
+                "Busca contas a pagar (despesas e pagamentos a fornecedores). "
+                "Use para responder quanto há para pagar, listar pagamentos futuros ou em aberto."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "situacao": {
+                        "type": "integer",
+                        "description": "ID da situação: 1=Em aberto, 2=Parcial, 3=Baixada/Paga, 4=Cancelada. Omitir para todas.",
+                    },
+                    "data_inicio": {
+                        "type": "string",
+                        "description": "Data inicial de vencimento YYYY-MM-DD.",
+                    },
+                    "data_fim": {
+                        "type": "string",
+                        "description": "Data final de vencimento YYYY-MM-DD.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calcular_fluxo_caixa",
+            "description": (
+                "Calcula o fluxo de caixa consolidando o total recebido (contas a receber baixadas) e total pago (contas a pagar baixadas). "
+                "Use para responder sobre o saldo líquido do período ou lucro líquido."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "data_inicio": {
+                        "type": "string",
+                        "description": "Data inicial YYYY-MM-DD.",
+                    },
+                    "data_fim": {
+                        "type": "string",
+                        "description": "Data final YYYY-MM-DD.",
+                    },
+                },
+                "required": ["data_inicio", "data_fim"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_categorias",
+            "description": (
+                "Busca a estrutura de categorias de produtos cadastradas no sistema."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_canais_venda",
+            "description": (
+                "Busca as configurações dos canais de venda (lojas físicas e e-commerce) cadastradas no sistema."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_formas_pagamento",
+            "description": (
+                "Busca as formas e meios de pagamento configurados no sistema."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
 ]
