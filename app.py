@@ -38,138 +38,249 @@ st.set_page_config(
 # ============================================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-    /* Base */
-    .stApp {
-        font-family: 'Inter', sans-serif;
-    }
+:root {
+  --bg-000: hsl(60, 11%, 97%);
+  --bg-100: hsl(60, 11%, 95%);
+  --bg-200: hsl(60, 8%, 92%);
+  --bg-300: hsl(60, 6%, 88%);
+  --text-000: hsl(30, 20%, 12%);
+  --text-100: hsl(30, 8%, 18%);
+  --text-200: hsl(30, 5%, 32%);
+  --text-300: hsl(30, 4%, 48%);
+  --text-400: hsl(30, 3%, 58%);
+  --text-500: hsl(30, 2%, 68%);
+  --accent: #D97757;
+  --border-300: hsl(60, 5%, 83%);
+  --border-400: hsl(60, 4%, 89%);
+}
 
-    /* Header area */
-    header[data-testid="stHeader"] {
-        background-color: rgba(14, 14, 26, 0.95);
-        backdrop-filter: blur(10px);
-    }
+/* ── Base ── */
+.stApp {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-100) !important;
+}
 
-    /* Sidebar */
-    section[data-testid="stSidebar"] {
-        background-color: #12121f;
-        border-right: 1px solid rgba(76, 175, 80, 0.15);
-    }
+.stApp [data-testid="stAppViewContainer"] {
+  background-color: var(--bg-100) !important;
+}
 
-    section[data-testid="stSidebar"] .stMarkdown h1 {
-        font-size: 1.3rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #4CAF50, #81C784);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
+.stApp > header {
+  background-color: var(--bg-100) !important;
+  border-bottom: 0.5px solid var(--border-300);
+}
 
-    /* Chat messages */
-    .stChatMessage {
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        padding: 1rem;
-        margin-bottom: 0.5rem;
-    }
+/* ── Sidebar — light, not dark ── */
+section[data-testid="stSidebar"] {
+  background-color: var(--bg-200) !important;
+  border-right: 0.5px solid var(--border-300);
+}
 
-    /* User message */
-    .stChatMessage[data-testid="stChatMessage-user"] {
-        background-color: rgba(76, 175, 80, 0.08);
-        border-color: rgba(76, 175, 80, 0.15);
-    }
+section[data-testid="stSidebar"] * {
+  color: var(--text-200) !important;
+}
 
-    /* Assistant message */
-    .stChatMessage[data-testid="stChatMessage-assistant"] {
-        background-color: rgba(26, 26, 46, 0.6);
-    }
+section[data-testid="stSidebar"] .stMarkdown h1 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-000) !important;
+  letter-spacing: -0.02em;
+}
 
-    /* Chat input */
-    .stChatInput {
-        border-color: rgba(76, 175, 80, 0.3);
-    }
-    .stChatInput:focus-within {
-        border-color: #4CAF50;
-        box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.3);
-    }
+section[data-testid="stSidebar"] .stButton button {
+  background: var(--bg-000);
+  border: 0.5px solid var(--border-300);
+  color: var(--text-200) !important;
+  border-radius: 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.12s ease;
+  box-shadow: none;
+}
 
-    /* Status indicator */
-    .status-connected {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 500;
-    }
-    .status-connected.online {
-        background: rgba(76, 175, 80, 0.15);
-        color: #81C784;
-        border: 1px solid rgba(76, 175, 80, 0.3);
-    }
-    .status-connected.offline {
-        background: rgba(244, 67, 54, 0.15);
-        color: #ef9a9a;
-        border: 1px solid rgba(244, 67, 54, 0.3);
-    }
+section[data-testid="stSidebar"] .stButton button:hover {
+  background: var(--bg-100);
+  border-color: var(--text-400);
+}
 
-    /* Suggestion chips */
-    .suggestion-chip {
-        display: inline-block;
-        padding: 8px 16px;
-        margin: 4px;
-        border-radius: 20px;
-        background: rgba(76, 175, 80, 0.1);
-        border: 1px solid rgba(76, 175, 80, 0.25);
-        color: #a5d6a7;
-        font-size: 0.85rem;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
+/* ── Sidebar divider ── */
+.sidebar-divider {
+  border: none;
+  border-top: 0.5px solid var(--border-300);
+  margin: 0.875rem 0;
+}
 
-    /* Divider */
-    .sidebar-divider {
-        border: none;
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
-        margin: 1rem 0;
-    }
+/* ── Chat messages ── */
+.stChatMessage {
+  background: transparent !important;
+  border: none !important;
+  padding: 0.625rem 0 !important;
+}
 
-    /* Tables in chat */
-    .stChatMessage table {
-        border-collapse: collapse;
-        width: 100%;
-        margin: 0.5rem 0;
-    }
-    .stChatMessage th {
-        background: rgba(76, 175, 80, 0.15);
-        padding: 8px 12px;
-        text-align: left;
-        font-weight: 600;
-        font-size: 0.85rem;
-    }
-    .stChatMessage td {
-        padding: 6px 12px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-        font-size: 0.85rem;
-    }
+/* User bubble — right-aligned feel */
+.stChatMessage[data-testid="stChatMessage-user"] .stMarkdown {
+  background: var(--bg-200);
+  border: 0.5px solid var(--border-300);
+  border-radius: 1.2rem 1.2rem 0.25rem 1.2rem;
+  padding: 0.875rem 1.125rem;
+  margin-left: auto;
+  max-width: 85%;
+  width: fit-content;
+  color: var(--text-100);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
 
-    /* Welcome message */
-    .welcome-title {
-        font-size: 1.8rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #4CAF50, #81C784, #C8E6C9);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin-bottom: 0.5rem;
-    }
-    .welcome-subtitle {
-        color: #9e9e9e;
-        font-size: 1rem;
-        margin-bottom: 2rem;
-    }
+/* Assistant bubble */
+.stChatMessage[data-testid="stChatMessage-assistant"] .stMarkdown {
+  background: var(--bg-000);
+  border: 0.5px solid var(--border-400);
+  border-radius: 0.25rem 1.2rem 1.2rem 1.2rem;
+  padding: 0.875rem 1.125rem;
+  max-width: 100%;
+  color: var(--text-100);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  box-shadow: 0 2px 8px 0 hsl(0 0% 0% / 3%);
+}
+
+/* ── Tables inside chat ── */
+.stChatMessage table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.875rem;
+  margin: 0.75rem 0;
+}
+
+.stChatMessage th {
+  background: var(--bg-200);
+  padding: 7px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-200);
+  border-bottom: 0.5px solid var(--border-300);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stChatMessage td {
+  padding: 6px 12px;
+  border-bottom: 0.5px solid var(--border-400);
+  color: var(--text-100);
+}
+
+/* ── Chat input ── */
+.stChatInput textarea {
+  background: var(--bg-000) !important;
+  border: 0.5px solid var(--border-300) !important;
+  border-radius: 0.75rem !important;
+  color: var(--text-100) !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 0.9375rem !important;
+  line-height: 1.5 !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.stChatInput textarea:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px hsl(20 55% 60% / 12%) !important;
+  outline: none !important;
+}
+
+/* ── Status indicators ── */
+.status-connected {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.status-connected.online {
+  background: hsl(135, 40%, 93%);
+  color: hsl(135, 45%, 30%);
+  border: 0.5px solid hsl(135, 35%, 76%);
+}
+
+.status-connected.offline {
+  background: hsl(0, 40%, 94%);
+  color: hsl(0, 55%, 40%);
+  border: 0.5px solid hsl(0, 35%, 82%);
+}
+
+/* ── Suggestion buttons (welcome screen) ── */
+.stButton button {
+  background: var(--bg-000);
+  border: 0.5px solid var(--border-300);
+  color: var(--text-200) !important;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: left;
+  padding: 0.625rem 0.875rem;
+  transition: all 0.12s ease;
+  box-shadow: 0 1px 3px 0 hsl(0 0% 0% / 4%);
+}
+
+.stButton button:hover {
+  background: var(--bg-100);
+  border-color: var(--text-400);
+  box-shadow: 0 2px 6px 0 hsl(0 0% 0% / 6%);
+  transform: translateY(-0.5px);
+}
+
+/* ── Welcome screen ── */
+.welcome-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-000);
+  margin-bottom: 0.375rem;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.welcome-title span {
+  color: var(--accent);
+}
+
+.welcome-subtitle {
+  color: var(--text-300);
+  font-size: 0.9375rem;
+  margin-bottom: 1.75rem;
+  line-height: 1.5;
+}
+
+/* ── Spinner ── */
+.stSpinner > div {
+  border-top-color: var(--accent) !important;
+}
+
+/* ── Content area ── */
+.block-container {
+  max-width: 52rem !important;
+  padding-top: 5rem !important;
+}
+
+/* ── Code in responses ── */
+.stChatMessage code {
+  background: var(--bg-200);
+  border: 0.5px solid var(--border-300);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.875em;
+  color: var(--accent);
+}
+
+.stChatMessage pre {
+  background: var(--bg-300) !important;
+  border: 0.5px solid var(--border-300);
+  border-radius: 0.6rem;
+  padding: 1rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -274,7 +385,7 @@ def render_sidebar():
 def render_welcome():
     """Tela de boas-vindas quando não há mensagens."""
     st.markdown(
-        '<div class="welcome-title">De Ponta Chat Intelligence</div>',
+        '<div class="welcome-title">De Ponta <span>AI</span></div>',
         unsafe_allow_html=True,
     )
     st.markdown(
