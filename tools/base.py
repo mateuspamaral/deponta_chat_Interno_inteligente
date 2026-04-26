@@ -13,6 +13,29 @@ from utils.constants import BLING_BASE_URL, BLING_PAGE_LIMIT
 
 logger = logging.getLogger(__name__)
 
+# TTL em segundos por prefixo de endpoint.
+# Dados de catálogo (produtos, categorias) → cache longo.
+# Dados transacionais (pedidos, contas, estoques) → cache curto ou sem cache.
+ENDPOINT_CACHE_TTL: dict[str, int] = {
+    "produtos":           1800,  # 30 min — catálogo muda pouco
+    "categorias":         1800,
+    "formas-pagamentos":  1800,
+    "canais-venda":       1800,
+    "depositos":          1800,
+    "vendedores":         1800,
+    "contatos":            600,  # 10 min
+    "pedidos/vendas":      120,  # 2 min — transacional
+    "contas/receber":      120,
+    "contas/pagar":        120,
+    "estoques":            120,
+    "nfe":                 300,
+    "nfce":                300,
+    "nfse":                300,
+    "anuncios":            300,
+    "caixas":               60,  # 1 min — extrato financeiro
+    "_default":            300,  # 5 min para qualquer outro
+}
+
 
 class BlingAPIError(Exception):
     """Erro na chamada à API do Bling."""
@@ -36,7 +59,8 @@ class BlingClient:
         self.auth = auth
         self.session = requests.Session()
         self.session.timeout = 30
-        self._cache = {}
+        # Cache com TTL: {cache_key: {"data": dict, "expires_at": float}}
+        self._cache: dict[str, dict] = {}
 
     def _request(self, method: str, endpoint: str, params: dict = None, **kwargs) -> dict:
         """
@@ -98,19 +122,72 @@ class BlingClient:
 
         raise BlingAPIError("Número máximo de retentativas excedido.")
 
+    def _get_cache_ttl(self, endpoint: str) -> int:
+        """Retorna TTL em segundos baseado no prefixo do endpoint."""
+        endpoint_clean = endpoint.lstrip("/")
+        for prefix, ttl in ENDPOINT_CACHE_TTL.items():
+            if endpoint_clean.startswith(prefix):
+                return ttl
+        return ENDPOINT_CACHE_TTL["_default"]
+
     def get(self, endpoint: str, params: dict = None, use_cache: bool = True) -> dict:
-        """GET request para a API do Bling com cache em memória opcional."""
-        if use_cache:
-            # Cria chave de cache baseada no endpoint e parâmetros
-            cache_key = f"{endpoint}_{str(params or {})}"
-            if cache_key in self._cache:
-                return self._cache[cache_key]
-                
-            result = self._request("GET", endpoint, params=params)
-            self._cache[cache_key] = result
-            return result
-            
-        return self._request("GET", endpoint, params=params)
+        """
+        GET request para a API do Bling com cache TTL em memória.
+
+        O TTL é definido por tipo de endpoint em ENDPOINT_CACHE_TTL:
+        - Dados de catálogo (produtos, categorias): 30 min
+        - Dados transacionais (pedidos, contas): 2 min
+        - Padrão: 5 min
+
+        Args:
+            endpoint: caminho do endpoint sem a base URL
+            params: parâmetros de query string
+            use_cache: False força request mesmo com cache válido
+        """
+        if not use_cache:
+            return self._request("GET", endpoint, params=params)
+
+        cache_key = f"{endpoint}_{str(params or {})}"
+        entry = self._cache.get(cache_key)
+
+        if entry and time.time() < entry["expires_at"]:
+            logger.debug("Cache hit: %s (expira em %.0fs)", endpoint,
+                         entry["expires_at"] - time.time())
+            return entry["data"]
+
+        result = self._request("GET", endpoint, params=params)
+        ttl = self._get_cache_ttl(endpoint)
+        self._cache[cache_key] = {
+            "data": result,
+            "expires_at": time.time() + ttl,
+        }
+        logger.debug("Cache set: %s (TTL=%ds)", endpoint, ttl)
+        return result
+
+    def clear_cache(self, endpoint_prefix: str = None) -> int:
+        """
+        Limpa o cache em memória.
+
+        Args:
+            endpoint_prefix: se informado, remove apenas entradas cujo
+                             cache_key começa com este prefixo.
+                             Se None, limpa todo o cache.
+
+        Returns:
+            Número de entradas removidas.
+        """
+        if endpoint_prefix is None:
+            count = len(self._cache)
+            self._cache.clear()
+            logger.info("Cache limpo: %d entradas removidas", count)
+            return count
+
+        keys_to_remove = [k for k in self._cache if k.startswith(endpoint_prefix)]
+        for k in keys_to_remove:
+            del self._cache[k]
+        logger.info("Cache parcial limpo: %d entradas removidas (prefix='%s')",
+                    len(keys_to_remove), endpoint_prefix)
+        return len(keys_to_remove)
 
     def get_all_pages(self, endpoint: str, params: dict = None) -> list:
         """
