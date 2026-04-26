@@ -38,6 +38,15 @@ def calcular_faturamento(client: BlingClient, data_inicio: str, data_fim: str, c
     qtd = len(pedidos)
     ticket = faturamento / qtd if qtd > 0 else 0
 
+    # Taxas de marketplace: disponíveis apenas via detalhe de pedido.
+    # Na listagem de /pedidos/vendas, o campo taxas não está disponível.
+    # Reportamos 0 aqui por consistência — o valor real está em calcular_margem_produtos.
+    # Para obter taxas reais, cruzar com extrato /caixas (tool futura Fase 2).
+    taxas_nota = (
+        "Taxas de gateway/marketplace não incluídas neste total. "
+        "Use calcular_margem_produtos para análise com taxas por produto."
+    )
+
     return json.dumps({
         "faturamento": round(faturamento, 2),
         "quantidade_pedidos": qtd,
@@ -46,6 +55,7 @@ def calcular_faturamento(client: BlingClient, data_inicio: str, data_fim: str, c
         "total_com_frete": round(faturamento + frete_total, 2),
         "periodo": f"{data_inicio} a {data_fim}",
         "canal": canal or "Todos",
+        "nota_taxas": taxas_nota,
     }, ensure_ascii=False)
 
 
