@@ -81,9 +81,10 @@ TOOL_DEFINITIONS = [
             "name": "buscar_estoque_critico",
             "description": (
                 "Busca produtos com estoque baixo (igual ou abaixo do limite mínimo). "
-                "Identifica itens com risco de ruptura de estoque. "
+                "Identifica itens com risco de ruptura de estoque com breakdown por depósito. "
                 "Use para perguntas sobre estoque baixo, risco de faltar produto, "
-                "sugestão de reposição."
+                "sugestão de reposição. "
+                "Depósitos disponíveis: 14887895820 (Loja Física), 14887895821 (Distribuição)."
             ),
             "parameters": {
                 "type": "object",
@@ -91,6 +92,16 @@ TOOL_DEFINITIONS = [
                     "limite_minimo": {
                         "type": "integer",
                         "description": "Estoque mínimo para considerar crítico. Default: 5.",
+                    },
+                    "id_deposito": {
+                        "type": "integer",
+                        "enum": [14887895820, 14887895821],
+                        "description": (
+                            "Filtrar por depósito específico. "
+                            "14887895820 = Loja Física (balcão), "
+                            "14887895821 = Distribuição (armazém). "
+                            "Omitir para considerar todos os depósitos."
+                        ),
                     },
                 },
                 "required": [],

@@ -11,33 +11,143 @@ from utils.constants import SITUACOES_EXCLUIDAS
 
 logger = logging.getLogger(__name__)
 
+# IDs de depósitos confirmados no ambiente De Ponta
+DEPOSITO_LOJA_FISICA = 14887895820    # Loja Física - Stop Gallery (padrão)
+DEPOSITO_DISTRIBUICAO = 14887895821   # Distribuição - Stop Gallery
 
-def buscar_estoque_critico(client: BlingClient, limite_minimo: int = 5) -> str:
+# Tamanho do batch para /estoques/saldos
+# A API do Bling processa um ID por chamada — iteramos produto a produto
+# usando o cache TTL=2min para amortizar o custo em consultas repetidas.
+ESTOQUE_SALDOS_BATCH_SIZE = 1
+
+
+def _buscar_saldo_produto(client: BlingClient, produto_id: int) -> dict:
     """
-    Produtos com estoque <= limite_minimo. Identifica risco de ruptura.
+    Busca saldo de estoque detalhado para um produto via /estoques/saldos.
+
+    Retorna breakdown por depósito além dos totais virtuais e físicos.
+    Usa cache TTL=2min (herda do BlingClient).
+
+    Args:
+        client: instância do BlingClient
+        produto_id: ID do produto no Bling
+
+    Returns:
+        dict com saldoFisicoTotal, saldoVirtualTotal, depositos[].
+        Em caso de erro, retorna valores zerados.
     """
-    produtos_raw = client.get_all_pages("produtos", params={})
+    try:
+        resp = client.get(
+            "estoques/saldos",
+            params={"idsProdutos[]": produto_id},
+        )
+        saldos = resp.get("data", [])
+        if saldos:
+            return saldos[0]
+        return {"saldoFisicoTotal": 0, "saldoVirtualTotal": 0, "depositos": []}
+    except Exception as e:
+        logger.warning("Erro /estoques/saldos produto %s: %s", produto_id, e)
+        return {"saldoFisicoTotal": 0, "saldoVirtualTotal": 0, "depositos": []}
+
+
+def buscar_estoque_critico(
+    client: BlingClient,
+    limite_minimo: int = 5,
+    id_deposito: int = None,
+) -> str:
+    """
+    Busca produtos com estoque crítico (abaixo do limite mínimo).
+
+    Usa /estoques/saldos para obter dados precisos com breakdown por depósito,
+    permitindo identificar se a ruptura é na loja física ou no armazém.
+
+    Fluxo:
+    1. Lista produtos ativos (formato "S" = simples, exclui produtos-pai "V")
+    2. Para cada produto, busca saldo detalhado via /estoques/saldos
+    3. Filtra produtos com saldo virtual <= limite_minimo
+    4. Retorna com breakdown de estoque por depósito
+
+    Args:
+        client: instância do BlingClient
+        limite_minimo: estoque virtual mínimo para considerar crítico (default: 5)
+        id_deposito: se informado, filtra pelo saldo do depósito específico.
+                     Use DEPOSITO_LOJA_FISICA ou DEPOSITO_DISTRIBUICAO.
+                     Se None, usa saldoVirtualTotal (soma de todos depósitos).
+
+    Returns:
+        JSON string com lista de produtos críticos e breakdown por depósito.
+    """
+    # 1. Buscar produtos ativos (sem variantes-pai)
+    produtos_raw = client.get_all_pages("produtos", params={"situacao": "A"})
+    produtos_simples = [
+        p for p in produtos_raw
+        if p.get("formato", "") != "V" and p.get("id")
+    ]
+
+    logger.info(
+        "buscar_estoque_critico: %d produtos simples ativos para verificar",
+        len(produtos_simples),
+    )
+
     criticos = []
+    erros = 0
 
-    for p in produtos_raw:
-        estoque = max(0, p.get("estoque", {}).get("saldoVirtualTotal", 0))
-        if p.get("formato", "") == "V":
-            continue  # pular produto pai, estoque está nas variantes
-        if estoque <= limite_minimo:
+    for produto in produtos_simples:
+        pid = produto.get("id")
+
+        # Buscar saldo via endpoint dedicado (cache TTL=2min)
+        saldo = _buscar_saldo_produto(client, pid)
+
+        # Determinar o estoque relevante conforme o depósito solicitado
+        if id_deposito:
+            deposito_data = next(
+                (d for d in saldo.get("depositos", [])
+                 if d.get("deposito", {}).get("id") == id_deposito),
+                None,
+            )
+            if deposito_data:
+                estoque_virtual = max(0, deposito_data.get("saldoVirtualTotal", 0) or 0)
+                estoque_fisico = max(0, deposito_data.get("saldoFisicoTotal", 0) or 0)
+            else:
+                estoque_virtual = 0
+                estoque_fisico = 0
+        else:
+            estoque_virtual = max(0, saldo.get("saldoVirtualTotal", 0) or 0)
+            estoque_fisico = max(0, saldo.get("saldoFisicoTotal", 0) or 0)
+
+        if estoque_virtual <= limite_minimo:
+            # Montar breakdown por depósito para diagnóstico
+            depositos_detalhados = []
+            for dep in saldo.get("depositos", []):
+                depositos_detalhados.append({
+                    "deposito_id": dep.get("deposito", {}).get("id"),
+                    "deposito_nome": dep.get("deposito", {}).get("descricao", ""),
+                    "saldo_fisico": max(0, dep.get("saldoFisicoTotal", 0) or 0),
+                    "saldo_virtual": max(0, dep.get("saldoVirtualTotal", 0) or 0),
+                })
+
             criticos.append({
-                "id": p.get("id"),
-                "nome": p.get("nome", ""),
-                "codigo": p.get("codigo", ""),
-                "estoque": estoque,
-                "preco": p.get("preco", 0),
-                "categoria": p.get("categoria", {}).get("descricao", ""),
+                "id": pid,
+                "nome": produto.get("nome", ""),
+                "codigo": produto.get("codigo", ""),
+                "estoque_virtual": estoque_virtual,
+                "estoque_fisico": estoque_fisico,
+                "preco": produto.get("preco", 0),
+                "categoria": produto.get("categoria", {}).get("descricao", ""),
+                "depositos": depositos_detalhados,
             })
 
-    criticos.sort(key=lambda x: x["estoque"])
+    criticos.sort(key=lambda x: x["estoque_virtual"])
+
     return json.dumps({
         "total_criticos": len(criticos),
         "limite_minimo": limite_minimo,
+        "filtro_deposito": id_deposito,
         "produtos": criticos,
+        "meta": {
+            "total_produtos_verificados": len(produtos_simples),
+            "fonte": "/estoques/saldos",
+        },
     }, ensure_ascii=False)
 
 

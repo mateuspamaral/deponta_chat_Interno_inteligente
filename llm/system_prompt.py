@@ -39,6 +39,7 @@ Entre as capabilities disponíveis estão:
 - **Frete:** campo separado, não é receita da loja.
 - **Margem bruta:** receita do produto - custo (precoCusto).
 - **Estoque negativo:** tratar como zero.
+- **Depósitos:** Loja Física (id=14887895820) = estoque disponível para venda no balcão. Distribuição (id=14887895821) = armazém. Para alertas de ruptura do PDV, use id_deposito=14887895820.
 - **Variantes:** produtos com formato "V" são pais com variações. O estoque real está nas variantes (formato "S").
 
 ## Como responder
