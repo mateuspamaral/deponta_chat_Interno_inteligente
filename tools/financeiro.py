@@ -11,10 +11,61 @@ from utils.constants import LOJAS, LOJAS_POR_NOME, SITUACOES_EXCLUIDAS
 
 logger = logging.getLogger(__name__)
 
-# Limite máximo de detalhes de pedidos buscados por consulta de margem.
-# Acima desse número, a função processa apenas os mais recentes.
-# Valor calibrado para manter latência < 30s com a API do Bling.
-MAX_DETALHES_MARGEM = 150
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Concorrência máxima para chamadas paralelas à API do Bling.
+# Valor conservador para respeitar rate limiting (API permite ~10 req/s).
+# Com 618 pedidos e 8 workers: ~77 batches × ~0.2s = ~15s estimado.
+_MAX_WORKERS_DETALHES = 8
+
+
+def _buscar_detalhes_paralelo(
+    client: BlingClient,
+    pedidos: list[dict],
+) -> dict[int, dict]:
+    """
+    Busca detalhes de múltiplos pedidos em paralelo via ThreadPoolExecutor.
+
+    Substitui o padrão N+1 sequencial. Usa cache TTL=2min do BlingClient,
+    então pedidos já consultados nesta sessão retornam imediatamente do cache
+    sem chamada à API.
+
+    Args:
+        client: instância do BlingClient
+        pedidos: lista de dicts de pedido com campo 'id'
+
+    Returns:
+        dict mapeando pedido_id → dict com o conteúdo de 'data' do response.
+        Pedidos com erro são omitidos do resultado.
+    """
+    resultados: dict[int, dict] = {}
+
+    def _fetch(pedido: dict) -> tuple[int, dict | None]:
+        pid = pedido["id"]
+        try:
+            resp = client.get(f"pedidos/vendas/{pid}")
+            return pid, resp.get("data", {})
+        except Exception as e:
+            logger.warning("Erro ao buscar detalhe do pedido %s: %s", pid, e)
+            return pid, None
+
+    logger.info(
+        "_buscar_detalhes_paralelo: %d pedidos com %d workers",
+        len(pedidos), _MAX_WORKERS_DETALHES,
+    )
+
+    with ThreadPoolExecutor(max_workers=_MAX_WORKERS_DETALHES) as executor:
+        futures = {executor.submit(_fetch, p): p["id"] for p in pedidos}
+        for future in as_completed(futures):
+            pid, detalhe = future.result()
+            if detalhe is not None:
+                resultados[pid] = detalhe
+
+    logger.info(
+        "_buscar_detalhes_paralelo: %d/%d pedidos retornados com sucesso",
+        len(resultados), len(pedidos),
+    )
+    return resultados
 def calcular_faturamento(client: BlingClient, data_inicio: str, data_fim: str, canal: str = None) -> str:
     """
     Faturamento do período. Usa totalProdutos (sem frete).
@@ -74,8 +125,8 @@ def calcular_margem_produtos(
     do campo `taxas` do detalhe do pedido e distribuídas proporcionalmente
     entre os itens do pedido pela receita gerada por cada um.
 
-    Se o período tiver mais de MAX_DETALHES_MARGEM pedidos, processa apenas
-    os mais recentes (ordenados por data decrescente) e inclui aviso no resultado.
+    Todos os pedidos do período são analisados via busca paralela
+    (ThreadPoolExecutor), eliminando o gargalo N+1 sequencial.
 
     Args:
         client: instância do BlingClient
@@ -97,23 +148,9 @@ def calcular_margem_produtos(
         "dataFinal": data_fim,
     })
     pedidos = [p for p in pedidos if p.get("situacao", {}).get("id") not in SITUACOES_EXCLUIDAS]
-
-    # 2. Limitar detalhes para evitar N+1 excessivo
-    pedidos_truncados = False
     total_pedidos_periodo = len(pedidos)
-    if len(pedidos) > MAX_DETALHES_MARGEM:
-        logger.warning(
-            "calcular_margem_produtos: %d pedidos no período — limitando a %d mais recentes "
-            "para manter latência aceitável.",
-            len(pedidos), MAX_DETALHES_MARGEM,
-        )
-        # Mais recentes primeiro (a API já retorna ordenado por data desc na maioria dos casos,
-        # mas garantimos a ordenação explícita)
-        pedidos = sorted(pedidos, key=lambda p: p.get("data", ""), reverse=True)
-        pedidos = pedidos[:MAX_DETALHES_MARGEM]
-        pedidos_truncados = True
 
-    # 3. Buscar custo de todos os produtos (cache 30min — catálogo não muda frequentemente)
+    # 2. Buscar custo de todos os produtos (cache 30min — catálogo não muda frequentemente)
     produtos_raw = client.get_all_pages("produtos", params={})
     custo_map: dict[int, float] = {}
     nome_map: dict[int, str] = {}
@@ -123,28 +160,23 @@ def calcular_margem_produtos(
             custo_map[pid] = p.get("precoCusto", 0) or 0
             nome_map[pid] = p.get("nome", "")
 
+    # 3. Buscar detalhes de todos os pedidos em paralelo
+    detalhes_map = _buscar_detalhes_paralelo(client, pedidos)
+
     # 4. Agregar receita, quantidade e taxas por produto
-    # taxas são distribuídas proporcionalmente entre itens do pedido
     vendas_produto: dict[int, dict] = {}
 
     for pedido in pedidos:
-        try:
-            # get() usa cache TTL=2min — pedidos consultados antes nesta sessão
-            # são retornados sem nova chamada à API
-            detalhe_resp = client.get(f"pedidos/vendas/{pedido['id']}")
-            detalhe = detalhe_resp.get("data", {})
-        except Exception as e:
-            logger.warning("Erro ao buscar detalhe do pedido %s: %s", pedido.get("id"), e)
+        detalhe = detalhes_map.get(pedido["id"])
+        if not detalhe:
             continue
 
         itens = detalhe.get("itens", [])
         if not itens:
             continue
 
-        # Extrair taxa total do pedido (marketplace/gateway)
         taxa_pedido = _extrair_taxa_pedido(detalhe)
 
-        # Calcular receita total do pedido para distribuição proporcional da taxa
         receita_total_pedido = sum(
             (item.get("valor", 0) or 0) * (item.get("quantidade", 0) or 0)
             for item in itens
@@ -170,7 +202,6 @@ def calcular_margem_produtos(
             vendas_produto[pid]["receita"] += receita_item
             vendas_produto[pid]["quantidade"] += quantidade
 
-            # Distribuir taxa proporcionalmente pela receita do item
             if taxa_pedido > 0 and receita_total_pedido > 0:
                 proporcao = receita_item / receita_total_pedido
                 vendas_produto[pid]["taxas"] += taxa_pedido * proporcao
@@ -198,22 +229,17 @@ def calcular_margem_produtos(
 
     margens.sort(key=lambda x: x["margem_bruta"], reverse=True)
 
-    resultado = {
+    return json.dumps({
         "top_n": top_n,
         "periodo": f"{data_inicio} a {data_fim}",
         "produtos": margens[:top_n],
         "meta": {
             "total_pedidos_periodo": total_pedidos_periodo,
-            "pedidos_analisados": len(pedidos),
-            "cobertura_parcial": pedidos_truncados,
-            "aviso": (
-                f"Análise baseada nos {MAX_DETALHES_MARGEM} pedidos mais recentes do período "
-                f"(total: {total_pedidos_periodo}). Para análise completa, reduza o período."
-            ) if pedidos_truncados else None,
+            "pedidos_analisados": len(detalhes_map),
+            "cobertura_parcial": False,
+            "aviso": None,
         },
-    }
-
-    return json.dumps(resultado, ensure_ascii=False)
+    }, ensure_ascii=False)
 
 
 def _extrair_taxa_pedido(detalhe: dict) -> float:
@@ -248,6 +274,8 @@ def _extrair_taxa_pedido(detalhe: dict) -> float:
 def buscar_produtos_sem_giro(client: BlingClient, dias: int = 30) -> str:
     """
     Produtos que não venderam nada nos últimos N dias.
+
+    Usa busca paralela de detalhes de pedidos para eliminar latência N+1.
     """
     data_fim = datetime.now().strftime("%Y-%m-%d")
     data_inicio = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d")
@@ -257,17 +285,16 @@ def buscar_produtos_sem_giro(client: BlingClient, dias: int = 30) -> str:
     })
     pedidos = [p for p in pedidos if p.get("situacao", {}).get("id") not in SITUACOES_EXCLUIDAS]
 
+    # Buscar detalhes em paralelo
+    detalhes_map = _buscar_detalhes_paralelo(client, pedidos)
+
     # Coletar IDs de produtos vendidos
     ids_vendidos = set()
-    for pedido in pedidos:
-        try:
-            detalhe = client.get(f"pedidos/vendas/{pedido['id']}")
-            for item in detalhe.get("data", {}).get("itens", []):
-                pid = item.get("produto", {}).get("id")
-                if pid:
-                    ids_vendidos.add(pid)
-        except Exception:
-            continue
+    for detalhe in detalhes_map.values():
+        for item in detalhe.get("itens", []):
+            pid = item.get("produto", {}).get("id")
+            if pid:
+                ids_vendidos.add(pid)
 
     # Buscar todos os produtos ativos com estoque
     todos = client.get_all_pages("produtos", params={})
